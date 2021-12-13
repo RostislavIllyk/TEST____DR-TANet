@@ -64,13 +64,13 @@ class data_loader(Dataset):
 def check_validness(f):
     return any([i in spt(f)[1] for i in ['jpg','png']])
 
-class Evaluate:
+class Prediction:
 
     def __init__(self):
         self.args = None
         self.set = None
 
-    def eval(self):
+    def predict(self):
 
         input = torch.from_numpy(np.concatenate((self.t0,self.t1),axis=0)).contiguous()
         input = input.view(1,-1,self.w_r,self.h_r)
@@ -91,7 +91,7 @@ class Evaluate:
             self.store_imgs_and_cal_matrics(mask_pred)
         else:
             pass
-        return (0, 0, 0, 0)
+        return
 
 
 
@@ -116,26 +116,7 @@ class Evaluate:
 
         return
 
-    def cal_metrcis(self,pred,target):
 
-        temp = np.dstack((pred == 0, target == 0))
-        TP = sum(sum(np.all(temp,axis=2)))
-
-        temp = np.dstack((pred == 0, target == 255))
-        FP = sum(sum(np.all(temp,axis=2)))
-
-        temp = np.dstack((pred == 255, target == 0))
-        FN = sum(sum(np.all(temp, axis=2)))
-
-        temp = np.dstack((pred == 255, target == 255))
-        TN = sum(sum(np.all(temp, axis=2)))
-
-        precision = TP / (TP + FP)
-        recall = TP / (TP + FN)
-        accuracy = (TP + TN) / (TP + FP + FN + TN)
-        f1_score = 2 * recall * precision / (precision + recall)
-
-        return (precision, recall, accuracy, f1_score)
 
     def Init(self):
 
@@ -179,10 +160,10 @@ class Evaluate:
         self.model.eval()
 
 
-class evaluate_pcd(Evaluate):
+class prediction_pcd(Prediction):
 
     def __init__(self,arguments):
-        super(evaluate_pcd,self).__init__()
+        super(prediction_pcd,self).__init__()
         self.args = arguments
 
     def run(self, set):
@@ -195,7 +176,7 @@ class evaluate_pcd(Evaluate):
         self.fn_model = path_to_model
 
 
-        super(evaluate_pcd,self).run()
+        super(prediction_pcd,self).run()
 
         test_loader = data_loader(self.args.datadir)
 
@@ -207,7 +188,7 @@ class evaluate_pcd(Evaluate):
             self.fn_img = self.dir_img + '/{0}-{1:08d}.png'.format(self.ds, self.index)
 
             self.t0,self.t1, self.w_ori,self.h_ori,self.w_r,self.h_r = test_loader[idx]
-            self.eval()
+            self.predict()
 
 
 
@@ -239,9 +220,9 @@ if __name__ =='__main__':
 
 
     if parser.parse_args().dataset == 'pcd':
-        eval = evaluate_pcd(parser.parse_args())
-        eval.Init()
-        eval.run(0)
+        predict = prediction_pcd(parser.parse_args())
+        predict.Init()
+        predict.run(0)
 
     else:
         print('Error: Cannot identify the dataset...(dataset: pcd or vl_cmu_cd)')
