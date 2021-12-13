@@ -1,4 +1,3 @@
-import datasets
 from TANet import TANet
 import os
 
@@ -18,8 +17,8 @@ class data_loader(Dataset):
     def __init__(self, root):
         super(data_loader, self).__init__()
 
-        self.img_t0_root = root + '/t0'  # pjoin(root,'t0')
-        self.img_t1_root = root + '/t1'  # pjoin(root,'t1')
+        self.img_t0_root = root + '/t0'
+        self.img_t1_root = root + '/t1'
 
         self.filename = list(spt(f)[0] for f in os.listdir(self.img_t0_root) if check_validness(f))
         self.filename.sort()
@@ -40,18 +39,16 @@ class data_loader(Dataset):
         img_t0 = cv2.imread(fn_t0, 1)
         img_t1 = cv2.imread(fn_t1, 1)
 
-
         w, h, c = img_t0.shape
         w_r = int(256 * max(w / 256, 1))
         h_r = int(256 * max(h / 256, 1))
+
         # resize images so that min(w, h) == 256
         img_t0_r = cv2.resize(img_t0, (h_r, w_r))
         img_t1_r = cv2.resize(img_t1, (h_r, w_r))
 
-
         img_t0_r = np.asarray(img_t0_r).astype('f').transpose(2, 0, 1) / 128.0 - 1.0
         img_t1_r = np.asarray(img_t1_r).astype('f').transpose(2, 0, 1) / 128.0 - 1.0
-
 
         return img_t0_r, img_t1_r, w, h, w_r, h_r
 
@@ -62,7 +59,8 @@ class data_loader(Dataset):
 
 
 def check_validness(f):
-    return any([i in spt(f)[1] for i in ['jpg','png']])
+    return any([i in spt(f)[1] for i in ['jpg', 'png']])
+
 
 class Prediction:
 
@@ -72,20 +70,19 @@ class Prediction:
 
     def predict(self):
 
-        input = torch.from_numpy(np.concatenate((self.t0,self.t1),axis=0)).contiguous()
-        input = input.view(1,-1,self.w_r,self.h_r)
+        input = torch.from_numpy(np.concatenate((self.t0, self.t1), axis=0)).contiguous()
+        input = input.view(1, -1, self.w_r, self.h_r)
         input = input.cuda()
-        output= self.model(input)
+        output = self.model(input)
 
         input = input[0].cpu().data
-        img_t0 = input[0:3,:,:]
-        img_t1 = input[3:6,:,:]
+        img_t0 = input[0:3, :, :]
+        img_t1 = input[3:6, :, :]
         img_t0 = (img_t0+1)*128
         img_t1 = (img_t1+1)*128
         output = output[0].cpu().data
-        #mask_pred =F.softmax(output[0:2,:,:],dim=0)[0]*255
-        mask_pred = np.where(F.softmax(output[0:2,:,:],dim=0)[0]>0.5, 255, 0)
-        #mask_gt = np.squeeze(np.where(self.mask==True,255,0),axis=0)
+
+        mask_pred = np.where(F.softmax(output[0:2, :, :], dim=0)[0] > 0.5, 255, 0)
 
         if self.args.store_imgs:
             self.store_imgs_and_cal_matrics(mask_pred)
@@ -93,15 +90,11 @@ class Prediction:
             pass
         return
 
-
-
     def store_imgs_and_cal_matrics(self, mask_pred):
 
         w, h = self.w_r, self.h_r
 
         img_save = cv2.cvtColor(mask_pred.astype(np.uint8), cv2.COLOR_GRAY2RGB)
-
-
 
         if w != self.w_ori or h != self.h_ori:
             img_save = cv2.resize(img_save, (self.h_ori, self.w_ori))
@@ -115,8 +108,6 @@ class Prediction:
         cv2.imwrite(fn_save, img_save)
 
         return
-
-
 
     def Init(self):
 
@@ -139,8 +130,6 @@ class Prediction:
         if not os.path.exists(self.resultdir):
             os.makedirs(self.resultdir)
 
-
-
     def run(self):
 
         if os.path.isfile(self.fn_model) is False:
@@ -152,7 +141,6 @@ class Prediction:
         self.model = TANet(self.args.encoder_arch, self.args.local_kernel_size, self.args.attn_stride,
                            self.args.attn_padding, self.args.attn_groups, self.args.drtam, self.args.refinement)
 
-        #state_dic = {k.partition('module.')[2]:v for k,v in torch.load(fn_model).items()}
         if self.args.multi_gpu:
             self.model = nn.DataParallel(self.model)
         self.model.load_state_dict(torch.load(self.fn_model))
@@ -162,32 +150,27 @@ class Prediction:
 
 class prediction_pcd(Prediction):
 
-    def __init__(self,arguments):
-        super(prediction_pcd,self).__init__()
+    def __init__(self, arguments):
+        super(prediction_pcd, self).__init__()
         self.args = arguments
 
-    def run(self, set):
+    def run(self):
 
-        self.set = set
-        #self.dir_img = pjoin(self.resultdir, 'imgs', 'set{0:1d}'.format(self.set))
         self.dir_img = self.resultdir + '/imgs'
-        #self.fn_model = pjoin(self.args.checkpointdir, 'set{0:1d}'.format(self.set), 'checkpointdir', '00060000.pth')
-        #self.fn_model = self.args.checkpointdir + '/DR-TANet_resnet34_ref' + '/checkpointdir' +'/00009000.pth'
         self.fn_model = path_to_model
 
-
-        super(prediction_pcd,self).run()
+        super(prediction_pcd, self).run()
 
         test_loader = data_loader(self.args.datadir)
 
         img_cnt = len(test_loader)
-        for idx in range(0,img_cnt):
+        for idx in range(0, img_cnt):
             self.index = idx
             self.ds = 'result'
 
             self.fn_img = self.dir_img + '/{0}-{1:08d}.png'.format(self.ds, self.index)
 
-            self.t0,self.t1, self.w_ori,self.h_ori,self.w_r,self.h_r = test_loader[idx]
+            self.t0, self.t1, self.w_ori, self.h_ori, self.w_r, self.h_r = test_loader[idx]
             self.predict()
 
 
@@ -196,15 +179,15 @@ class prediction_pcd(Prediction):
 
 
 
-if __name__ =='__main__':
+if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='STRAT PREDICTING...')
-    parser.add_argument('--dataset', type=str, default='pcd')                              #required=True)
-    parser.add_argument('--datadir', default='./files_to_predict')                                  #required=True)
-    parser.add_argument('--resultdir' , default='./predicted')                          #required=True)
-    parser.add_argument('--checkpointdir', default='./check')                              #required=True)
-    parser.add_argument('--encoder-arch', type=str,   default='resnet18')                  #required=True)   resnet34
-    parser.add_argument('--local-kernel-size',type=int, default=1)
+    parser.add_argument('--dataset', type=str, default='pcd')
+    parser.add_argument('--datadir', default='./files_to_predict')
+    parser.add_argument('--resultdir', default='./predicted')
+    parser.add_argument('--checkpointdir', default='./check')
+    parser.add_argument('--encoder-arch', type=str,   default='resnet18')
+    parser.add_argument('--local-kernel-size', type=int, default=1)
     parser.add_argument('--attn-stride', type=int, default=1)
     parser.add_argument('--attn-padding', type=int, default=0)
     parser.add_argument('--attn-groups', type=int, default=4)
@@ -214,31 +197,13 @@ if __name__ =='__main__':
     parser.add_argument('--multi-gpu', action='store_true', help='processing with multi-gpus')
 
     path_to_model = './check/DR-TANet_resnet18_ref/checkpointdir/00040000.pth'
-    #path_to_model = './check/DR-TANet_resnet34_ref/checkpointdir/00009000.pth'
-
-
-
+    # path_to_model = './check/DR-TANet_resnet34_ref/checkpointdir/00009000.pth'
 
     if parser.parse_args().dataset == 'pcd':
         predict = prediction_pcd(parser.parse_args())
         predict.Init()
-        predict.run(0)
+        predict.run()
 
     else:
         print('Error: Cannot identify the dataset...(dataset: pcd or vl_cmu_cd)')
         exit(-1)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
