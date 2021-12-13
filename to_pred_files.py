@@ -12,10 +12,10 @@ from torch.utils.data import Dataset
 from os.path import join as pjoin, splitext as spt
 
 
-class data_loader(Dataset):
+class DataLoader(Dataset):
 
     def __init__(self, root):
-        super(data_loader, self).__init__()
+        super(DataLoader, self).__init__()
 
         self.img_t0_root = root + '/t0'
         self.img_t1_root = root + '/t1'
@@ -29,10 +29,10 @@ class data_loader(Dataset):
         fn_t0 = pjoin(self.img_t0_root, fn + '.jpg')
         fn_t1 = pjoin(self.img_t1_root, fn + '.jpg')
 
-        if os.path.isfile(fn_t0) == False:
+        if os.path.isfile(fn_t0) is False:
             print('Error: File Not Found: ' + fn_t0)
             exit(-1)
-        if os.path.isfile(fn_t1) == False:
+        if os.path.isfile(fn_t1) is False:
             print('Error: File Not Found: ' + fn_t1)
             exit(-1)
 
@@ -56,17 +56,29 @@ class data_loader(Dataset):
         return len(self.filename)
 
 
-
-
 def check_validness(f):
     return any([i in spt(f)[1] for i in ['jpg', 'png']])
 
 
 class Prediction:
 
-    def __init__(self):
+    def __init__(self, arguments, model_path):
         self.args = None
         self.set = None
+        self.t0 = None
+        self.t1 = None
+        self.w_ori = None
+        self.h_ori = None
+        self.w_r = None
+        self.h_r = None
+        self.fn_img = None
+        self.fn_model = None
+        self.dir_img = None
+        self.model = None
+        self.resultdir = None
+
+        self.args = arguments
+        self.fn_model = model_path
 
     def predict(self):
 
@@ -75,11 +87,6 @@ class Prediction:
         input = input.cuda()
         output = self.model(input)
 
-        input = input[0].cpu().data
-        img_t0 = input[0:3, :, :]
-        img_t1 = input[3:6, :, :]
-        img_t0 = (img_t0+1)*128
-        img_t1 = (img_t1+1)*128
         output = output[0].cpu().data
 
         mask_pred = np.where(F.softmax(output[0:2, :, :], dim=0)[0] > 0.5, 255, 0)
@@ -109,7 +116,7 @@ class Prediction:
 
         return
 
-    def Init(self):
+    def init(self):
 
         if self.args.drtam:
             print('Dynamic Receptive Temporal Attention Network (DR-TANet)')
@@ -129,6 +136,7 @@ class Prediction:
         self.resultdir = pjoin(self.args.resultdir, model_name, self.args.dataset)
         if not os.path.exists(self.resultdir):
             os.makedirs(self.resultdir)
+        self.dir_img = self.resultdir + '/imgs'
 
     def run(self):
 
@@ -143,40 +151,19 @@ class Prediction:
 
         if self.args.multi_gpu:
             self.model = nn.DataParallel(self.model)
+
         self.model.load_state_dict(torch.load(self.fn_model))
         self.model = self.model.cuda()
-        self.model.eval()
 
-
-class prediction_pcd(Prediction):
-
-    def __init__(self, arguments):
-        super(prediction_pcd, self).__init__()
-        self.args = arguments
-
-    def run(self):
-
-        self.dir_img = self.resultdir + '/imgs'
-        self.fn_model = path_to_model
-
-        super(prediction_pcd, self).run()
-
-        test_loader = data_loader(self.args.datadir)
+        test_loader = DataLoader(self.args.datadir)
 
         img_cnt = len(test_loader)
         for idx in range(0, img_cnt):
-            self.index = idx
-            self.ds = 'result'
-
-            self.fn_img = self.dir_img + '/{0}-{1:08d}.png'.format(self.ds, self.index)
-
+            index = idx
+            ds = 'result'
+            self.fn_img = self.dir_img + '/{0}-{1:08d}.png'.format(ds, index)
             self.t0, self.t1, self.w_ori, self.h_ori, self.w_r, self.h_r = test_loader[idx]
             self.predict()
-
-
-
-
-
 
 
 if __name__ == '__main__':
@@ -200,8 +187,8 @@ if __name__ == '__main__':
     # path_to_model = './check/DR-TANet_resnet34_ref/checkpointdir/00009000.pth'
 
     if parser.parse_args().dataset == 'pcd':
-        predict = prediction_pcd(parser.parse_args())
-        predict.Init()
+        predict = Prediction(parser.parse_args(), path_to_model)
+        predict.init()
         predict.run()
 
     else:
